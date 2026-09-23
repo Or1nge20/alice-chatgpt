@@ -1,61 +1,70 @@
 const OPENAI_URL = "https://api.openai.com/v1/responses";
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(200).json({
-      response: {
-        text: "Навык работает.",
-        end_session: false
-      },
-      version: "1.0"
-    });
-  }
-
   try {
     const body = req.body || {};
+
     const text =
       body.request?.command ||
       body.request?.original_utterance ||
       "";
 
+    console.log("ALICE TEXT:", text);
+
     if (!text.trim()) {
       return res.status(200).json({
         response: {
-          text: "Скажите ваш вопрос.",
+          text: "Я получила ваш запрос, но не услышала вопрос.",
           end_session: false
         },
         version: "1.0"
       });
     }
 
-    const response = await fetch(OPENAI_URL, {
+    const apiKey = process.env.OPENAI_API_KEY;
+
+    if (!apiKey) {
+      console.error("OPENAI_API_KEY отсутствует");
+      return res.status(200).json({
+        response: {
+          text: "API ключ OpenAI не найден.",
+          end_session: false
+        },
+        version: "1.0"
+      });
+    }
+
+    const openai = await fetch(OPENAI_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`
+        "Authorization": `Bearer ${apiKey}`
       },
       body: JSON.stringify({
         model: "gpt-5-mini",
-        input: [
-          {
-            role: "system",
-            content:
-              "Ты голосовой помощник Алисы. Отвечай по-русски, кратко и естественно для озвучивания."
-          },
-          {
-            role: "user",
-            content: text
-          }
-        ],
-        max_output_tokens: 500
+        input: text,
+        max_output_tokens: 300
       })
     });
 
-    const data = await response.json();
+    const data = await openai.json();
+
+    console.log("OPENAI STATUS:", openai.status);
+
+    if (!openai.ok) {
+      console.error("OPENAI ERROR:", data);
+      return res.status(200).json({
+        response: {
+          text: "OpenAI не смог обработать запрос.",
+          end_session: false
+        },
+        version: "1.0"
+      });
+    }
 
     const answer =
       data.output_text ||
-      "Не удалось получить ответ.";
+      "OpenAI не вернул текст.";
 
     return res.status(200).json({
       response: {
@@ -67,11 +76,11 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
-    console.error(error);
+    console.error("SERVER ERROR:", error);
 
     return res.status(200).json({
       response: {
-        text: "Произошла ошибка. Попробуйте ещё раз.",
+        text: "Произошла ошибка на сервере.",
         end_session: false
       },
       version: "1.0"
