@@ -1,4 +1,4 @@
-const OPENAI_URL = "https://api.openai.com/v1/responses";
+const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 export default async function handler(req, res) {
   try {
@@ -14,48 +14,62 @@ export default async function handler(req, res) {
     if (!text.trim()) {
       return res.status(200).json({
         response: {
-          text: "Я получила ваш запрос, но не услышала вопрос.",
+          text: "Скажите ваш вопрос.",
           end_session: false
         },
         version: "1.0"
       });
     }
 
-    const apiKey = process.env.OPENAI_API_KEY;
+    const apiKey = process.env.OPENROUTER_API_KEY;
 
     if (!apiKey) {
-      console.error("OPENAI_API_KEY отсутствует");
+      console.error("OPENROUTER_API_KEY отсутствует");
+
       return res.status(200).json({
         response: {
-          text: "API ключ OpenAI не найден.",
+          text: "Ключ OpenRouter не найден.",
           end_session: false
         },
         version: "1.0"
       });
     }
 
-    const openai = await fetch(OPENAI_URL, {
+    const response = await fetch(OPENROUTER_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`
+        "Authorization": `Bearer ${apiKey}`,
+        "HTTP-Referer": "https://alice-chatgpt-six.vercel.app",
+        "X-Title": "Alice ChatGPT"
       },
       body: JSON.stringify({
-        model: "gpt-5-mini",
-        input: text,
-        max_output_tokens: 300
+        model: "openrouter/free",
+        messages: [
+          {
+            role: "system",
+            content:
+              "Ты голосовой помощник Алисы. Отвечай по-русски, кратко и естественно для озвучивания. Не используй markdown."
+          },
+          {
+            role: "user",
+            content: text
+          }
+        ],
+        max_tokens: 300
       })
     });
 
-    const data = await openai.json();
+    const data = await response.json();
 
-    console.log("OPENAI STATUS:", openai.status);
+    console.log("OPENROUTER STATUS:", response.status);
 
-    if (!openai.ok) {
-      console.error("OPENAI ERROR:", data);
+    if (!response.ok) {
+      console.error("OPENROUTER ERROR:", data);
+
       return res.status(200).json({
         response: {
-          text: "OpenAI не смог обработать запрос.",
+          text: "Не удалось получить ответ от нейросети.",
           end_session: false
         },
         version: "1.0"
@@ -63,8 +77,8 @@ export default async function handler(req, res) {
     }
 
     const answer =
-      data.output_text ||
-      "OpenAI не вернул текст.";
+      data.choices?.[0]?.message?.content ||
+      "Нейросеть не вернула ответ.";
 
     return res.status(200).json({
       response: {
@@ -80,7 +94,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       response: {
-        text: "Произошла ошибка на сервере.",
+        text: "Произошла ошибка. Попробуйте ещё раз.",
         end_session: false
       },
       version: "1.0"
